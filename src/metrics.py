@@ -1,18 +1,20 @@
 """
 Módulo de métricas customizadas para avaliação de prompts.
 
-Este módulo implementa métricas gerais e específicas para Bug to User Story:
+Este módulo implementa as métricas exigidas pelo desafio e métricas extras:
 
-MÉTRICAS GERAIS (3):
-1. F1-Score: Balanceamento entre Precision e Recall
-2. Clarity: Clareza e estrutura da resposta
-3. Precision: Informações corretas e relevantes
+MÉTRICAS OBRIGATÓRIAS DO DESAFIO (5) — todas devem atingir >= 0.9:
+1. Helpfulness: utilidade prática da resposta para o time
+2. Correctness: corretude factual em relação à referência
+3. F1-Score: balanceamento entre Precision e Recall
+4. Clarity: clareza e estrutura da resposta
+5. Precision: informações corretas, relevantes e sem alucinação
 
-MÉTRICAS ESPECÍFICAS PARA BUG TO USER STORY (4):
-4. Tone Score: Tom profissional e empático
-5. Acceptance Criteria Score: Qualidade dos critérios de aceitação
-6. User Story Format Score: Formato correto (Como... Eu quero... Para que...)
-7. Completeness Score: Completude e contexto técnico
+MÉTRICAS EXTRAS ESPECÍFICAS PARA BUG TO USER STORY (4, apenas diagnóstico):
+6. Tone Score: tom profissional e empático
+7. Acceptance Criteria Score: qualidade dos critérios de aceitação
+8. User Story Format Score: formato correto (Como... Eu quero... Para que...)
+9. Completeness Score: completude e contexto técnico
 
 Suporta múltiplos providers de LLM:
 - OpenAI (gpt-4o, gpt-4o-mini)
@@ -21,13 +23,11 @@ Suporta múltiplos providers de LLM:
 Configure o provider no arquivo .env através da variável LLM_PROVIDER.
 """
 
-import os
 import json
-import re
 from typing import Dict, Any
 from dotenv import load_dotenv
-from langchain_core.messages import SystemMessage, HumanMessage
-from utils import get_eval_llm
+from langchain_core.messages import HumanMessage
+from utils import get_eval_llm, get_eval_model, get_provider
 
 load_dotenv()
 
@@ -62,6 +62,112 @@ def extract_json_from_response(response_text: str) -> Dict[str, Any]:
         # Se não conseguir extrair, retornar valores default
         print(f"⚠️  Não foi possível extrair JSON da resposta: {response_text[:200]}...")
         return {"score": 0.0, "reasoning": "Erro ao processar resposta"}
+
+
+def evaluate_helpfulness(question: str, answer: str, reference: str) -> Dict[str, Any]:
+    """
+    Avalia HELPFULNESS via LLM-as-judge dedicado (temperature=0).
+
+    Mede se a resposta ajuda efetivamente o usuario a resolver o problema descrito,
+    independentemente de outras metricas. NAO derive de outras metricas.
+
+    Returns:
+        {"key": "helpfulness", "score": float em [0,1], "comment": str}
+    """
+    evaluator_prompt = f"""
+Voce e um avaliador especializado em medir UTILIDADE (helpfulness) de respostas de IA.
+
+PERGUNTA / RELATO DE BUG:
+{question}
+
+RESPOSTA GERADA PELO MODELO:
+{answer}
+
+RESPOSTA ESPERADA (Referencia):
+{reference}
+
+INSTRUCOES:
+Avalie o quanto a resposta gerada e UTIL para o usuario que enviou o relato:
+
+1. RESOLUCAO DO PROBLEMA (0.0 a 1.0): a resposta efetivamente ajuda a entender e endereçar o problema?
+2. ACIONABILIDADE (0.0 a 1.0): um time de desenvolvimento conseguiria agir a partir dela imediatamente?
+3. RELEVANCIA (0.0 a 1.0): foca no que importa para o relato, sem desviar do tema?
+4. COMPLETUDE PRATICA (0.0 a 1.0): cobre os elementos minimos esperados (persona, acao, valor, criterios)?
+
+Calcule a MEDIA dos 4 criterios.
+
+Retorne APENAS um JSON valido:
+{{
+  "score": <float 0.0-1.0>,
+  "reasoning": "<ate 100 palavras>"
+}}
+"""
+    try:
+        llm = get_evaluator_llm()
+        response = llm.invoke([HumanMessage(content=evaluator_prompt)])
+        result = extract_json_from_response(response.content)
+        score = float(result.get("score", 0.0))
+        return {
+            "key": "helpfulness",
+            "score": round(score, 4),
+            "comment": result.get("reasoning", ""),
+        }
+    except Exception as e:
+        print(f"Erro ao avaliar Helpfulness: {e}")
+        return {"key": "helpfulness", "score": 0.0, "comment": f"Erro: {e}"}
+
+
+def evaluate_correctness(question: str, answer: str, reference: str) -> Dict[str, Any]:
+    """
+    Avalia CORRECTNESS via LLM-as-judge dedicado (temperature=0).
+
+    Mede se a resposta esta factualmente correta em relacao a referencia (ground truth).
+    NAO derive de outras metricas.
+
+    Returns:
+        {"key": "correctness", "score": float em [0,1], "comment": str}
+    """
+    evaluator_prompt = f"""
+Voce e um avaliador especializado em medir CORRETUDE FACTUAL (correctness) de respostas de IA.
+
+PERGUNTA / RELATO DE BUG:
+{question}
+
+RESPOSTA GERADA PELO MODELO:
+{answer}
+
+RESPOSTA ESPERADA (Ground Truth):
+{reference}
+
+INSTRUCOES:
+Compare a RESPOSTA GERADA contra a RESPOSTA ESPERADA e julgue:
+
+1. ALINHAMENTO SEMANTICO (0.0 a 1.0): a resposta gerada captura o mesmo significado essencial da referencia?
+2. AUSENCIA DE ERROS FACTUAIS (0.0 a 1.0): nenhuma afirmacao contradiz a referencia ou inventa fatos?
+3. PERSONA / ACAO / VALOR (0.0 a 1.0): persona, acao desejada e valor de negocio batem com a referencia (admitindo sinonimos)?
+4. CRITERIOS DE ACEITACAO (0.0 a 1.0): cobre os mesmos cenarios principais (Given-When-Then) que a referencia?
+
+Calcule a MEDIA dos 4 criterios. Aceite parafraseamento e sinonimos validos.
+
+Retorne APENAS um JSON valido:
+{{
+  "score": <float 0.0-1.0>,
+  "reasoning": "<ate 100 palavras>"
+}}
+"""
+    try:
+        llm = get_evaluator_llm()
+        response = llm.invoke([HumanMessage(content=evaluator_prompt)])
+        result = extract_json_from_response(response.content)
+        score = float(result.get("score", 0.0))
+        return {
+            "key": "correctness",
+            "score": round(score, 4),
+            "comment": result.get("reasoning", ""),
+        }
+    except Exception as e:
+        print(f"Erro ao avaliar Correctness: {e}")
+        return {"key": "correctness", "score": 0.0, "comment": f"Erro: {e}"}
 
 
 def evaluate_f1_score(question: str, answer: str, reference: str) -> Dict[str, Any]:
@@ -696,8 +802,8 @@ NÃO adicione nenhum texto antes ou depois do JSON.
 # Exemplo de uso e testes
 if __name__ == "__main__":
     # Mostrar provider configurado
-    provider = os.getenv("LLM_PROVIDER", "openai")
-    eval_model = os.getenv("EVAL_MODEL", "gpt-4o")
+    provider = get_provider()
+    eval_model = get_eval_model()
 
     print("=" * 70)
     print("TESTANDO MÉTRICAS CUSTOMIZADAS")

@@ -1,0 +1,134 @@
+
+==================================================
+AVALIAÇÃO DE PROMPTS OTIMIZADOS
+==================================================
+
+Provider: openai
+Modelo Principal: gpt-4o-mini
+Modelo de Avaliação: gpt-4o
+
+Criando dataset de avaliação: bug_to_user_story-eval...
+   ✓ Carregados 15 exemplos do arquivo datasets/bug_to_user_story.jsonl
+   ✓ Dataset 'bug_to_user_story-eval' já existe, usando existente
+
+======================================================================
+PROMPTS PARA AVALIAR
+======================================================================
+
+Este script irá puxar prompts do LangSmith Hub.
+Certifique-se de ter feito push do prompt v2 antes de avaliar:
+  python src/push_prompts.py
+
+
+🔍 Avaliando: leonanluppi/bug_to_user_story_v1
+   Puxando prompt do LangSmith Hub: leonanluppi/bug_to_user_story_v1
+   ✓ Prompt carregado com sucesso
+   Executando experimento no LangSmith (traces + 5 métricas por exemplo)...
+View the evaluation results for experiment: 'bug_to_user_story_v1-c94ceff9' at:
+https://smith.langchain.com/o/e658249f-411e-4cef-b523-a3950b0ec9c8/datasets/0c532d5b-d06a-47ef-9e74-0d75e9952b4c/compare?selectedSessions=b1a657f6-ee8f-4c55-8017-8176a450b30d
+
+
+      [1] H:0.95 C:0.80 F1:0.75 Cl:0.90 P:0.90
+      [2] H:1.00 C:0.75 F1:0.75 Cl:0.95 P:0.90
+      [3] H:0.95 C:0.75 F1:0.75 Cl:0.85 P:0.90
+      [4] H:0.75 C:0.75 F1:0.60 Cl:0.85 P:0.90
+      [5] H:0.75 C:0.75 F1:0.69 Cl:0.90 P:0.80
+      [6] H:0.90 C:0.90 F1:0.80 Cl:0.85 P:0.90
+      [7] H:0.75 C:0.75 F1:0.69 Cl:0.90 P:0.83
+      [8] H:0.85 C:0.90 F1:0.75 Cl:0.85 P:0.90
+      [9] H:0.75 C:0.75 F1:0.55 Cl:0.85 P:0.67
+      [10] H:0.75 C:0.75 F1:0.67 Cl:0.80 P:0.67
+      [11] H:0.70 C:0.80 F1:0.80 Cl:0.90 P:0.90
+      [12] H:0.80 C:0.80 F1:0.67 Cl:0.85 P:0.90
+      [13] H:0.50 C:0.75 F1:0.69 Cl:0.80 P:0.67
+      [14] H:0.90 C:0.90 F1:0.80 Cl:0.90 P:0.90
+      [15] H:0.50 C:0.50 F1:0.53 Cl:0.50 P:0.67
+   Dataset: 15 exemplos | Experimento: bug_to_user_story_v1-c94ceff9
+
+==================================================
+Prompt: leonanluppi/bug_to_user_story_v1
+==================================================
+
+Métricas (LLM-as-judge dedicado, temperature=0):
+  - Helpfulness: 0.79 ✗
+  - Correctness: 0.77 ✗
+  - F1-Score:    0.70 ✗
+  - Clarity:     0.84 ✗
+  - Precision:   0.83 ✗
+
+--------------------------------------------------
+📊 MÉDIA GERAL: 0.7855
+--------------------------------------------------
+
+❌ STATUS: REPROVADO
+⚠️  Métricas abaixo de 0.9: Helpfulness, Correctness, F1-Score, Clarity, Precision
+
+🔍 Avaliando: allansoares/bug_to_user_story_v2
+   Puxando prompt do LangSmith Hub: allansoares/bug_to_user_story_v2
+   ✓ Prompt carregado com sucesso
+   Executando experimento no LangSmith (traces + 5 métricas por exemplo)...
+View the evaluation results for experiment: 'bug_to_user_story_v2-2fb71e76' at:
+https://smith.langchain.com/o/e658249f-411e-4cef-b523-a3950b0ec9c8/datasets/0c532d5b-d06a-47ef-9e74-0d75e9952b4c/compare?selectedSessions=d95153ce-d10a-4a04-a7cf-94f4508a6354
+
+
+      [1] H:0.95 C:0.90 F1:0.87 Cl:0.90 P:0.90
+      [2] H:0.95 C:0.75 F1:0.75 Cl:0.90 P:0.90
+      [3] H:0.95 C:0.85 F1:0.82 Cl:0.90 P:0.90
+      [4] H:0.90 C:0.85 F1:0.86 Cl:0.95 P:0.83
+      [5] H:0.90 C:0.95 F1:0.90 Cl:0.95 P:0.93
+      [6] H:0.95 C:0.95 F1:0.90 Cl:0.95 P:0.93
+      [7] H:1.00 C:1.00 F1:1.00 Cl:0.95 P:1.00
+      [8] H:1.00 C:1.00 F1:1.00 Cl:1.00 P:1.00
+      [9] H:0.95 C:0.95 F1:1.00 Cl:0.95 P:0.93
+      [10] H:0.80 C:0.95 F1:0.95 Cl:0.90 P:0.90
+      [11] H:0.95 C:0.95 F1:0.90 Cl:1.00 P:1.00
+      [12] H:0.95 C:0.97 F1:1.00 Cl:1.00 P:1.00
+      [13] H:0.95 C:0.95 F1:0.90 Cl:0.95 P:1.00
+      [14] H:0.95 C:1.00 F1:1.00 Cl:1.00 P:1.00
+      [15] H:0.50 C:0.95 F1:1.00 Cl:0.90 P:0.67
+   Dataset: 15 exemplos | Experimento: bug_to_user_story_v2-2fb71e76
+
+==================================================
+Prompt: allansoares/bug_to_user_story_v2
+==================================================
+
+Métricas (LLM-as-judge dedicado, temperature=0):
+  - Helpfulness: 0.91 ✓
+  - Correctness: 0.93 ✓
+  - F1-Score:    0.92 ✓
+  - Clarity:     0.95 ✓
+  - Precision:   0.93 ✓
+
+--------------------------------------------------
+📊 MÉDIA GERAL: 0.9276
+--------------------------------------------------
+
+✅ STATUS: APROVADO - Todas as métricas >= 0.9
+
+======================================================================
+COMPARAÇÃO LADO A LADO (v1 vs v2)
+======================================================================
+Métrica                v1         v2      Delta
+-----------------------------------------------
+Helpfulness        0.7867     0.9100    +0.1233
+Correctness        0.7733     0.9317    +0.1584
+F1-Score           0.6971     0.9237    +0.2266
+Clarity            0.8433     0.9467    +0.1034
+Precision          0.8273     0.9260    +0.0987
+
+======================================================================
+STATUS FINAL (v2): APROVADO
+======================================================================
+
+✓ Evidências no LangSmith:
+  Dataset: bug_to_user_story-eval
+  Experimento v1: bug_to_user_story_v1-c94ceff9
+  Experimento v2: bug_to_user_story_v2-2fb71e76
+  https://smith.langchain.com/ -> Datasets & Experiments
+
+✅ O prompt v2 atingiu todas as métricas >= 0.9!
+
+Próximos passos:
+1. Documente o processo e os resultados no README.md
+2. Capture screenshots das avaliações (docs/screenshots/)
+3. Faça commit e push para o GitHub

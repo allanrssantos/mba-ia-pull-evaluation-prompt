@@ -3,6 +3,7 @@ Funções auxiliares para o projeto de otimização de prompts.
 """
 
 import os
+import sys
 import yaml
 import json
 from typing import Dict, Any, Optional
@@ -10,6 +11,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Os logs usam emojis (✓ ✗ ❌). No Windows o console padrão é cp1252 e
+# `print` lança UnicodeEncodeError; forçamos UTF-8 em stdout/stderr.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 
 
 def load_yaml(file_path: str) -> Optional[Dict[str, Any]]:
@@ -173,12 +182,92 @@ def extract_json_from_response(response_text: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def env_first(*names: str, default: str = "") -> str:
+    """
+    Retorna o valor da primeira variável de ambiente preenchida dentre `names`.
+
+    Permite aceitar tanto os nomes do scaffold do curso (LLM_MODEL, EVAL_MODEL,
+    USERNAME_LANGSMITH_HUB) quanto os aliases do SPEC (OPENAI_RESPONSE_MODEL,
+    OPENAI_EVAL_MODEL, GEMINI_MODEL, LANGSMITH_USERNAME).
+    """
+    for name in names:
+        value = (os.getenv(name) or "").strip()
+        if value:
+            return value
+    return default
+
+
+def get_provider() -> str:
+    """
+    Retorna o provider normalizado: 'openai' ou 'google' ('gemini' é aceito como alias).
+    """
+    provider = (os.getenv('LLM_PROVIDER') or 'openai').strip().lower()
+    return 'google' if provider in ('google', 'gemini') else provider
+
+
+def get_response_model() -> str:
+    """
+    Modelo de resposta (geração das user stories), conforme o desafio:
+    OpenAI -> gpt-4o-mini | Gemini -> gemini-2.5-flash.
+    """
+    if get_provider() == 'google':
+        return env_first('LLM_MODEL', 'GEMINI_MODEL', default='gemini-2.5-flash')
+    return env_first('LLM_MODEL', 'OPENAI_RESPONSE_MODEL', default='gpt-4o-mini')
+
+
+def get_eval_model() -> str:
+    """
+    Modelo avaliador (LLM-as-judge), conforme o desafio:
+    OpenAI -> gpt-4o | Gemini -> gemini-2.5-flash.
+    """
+    if get_provider() == 'google':
+        return env_first('EVAL_MODEL', 'GEMINI_MODEL', default='gemini-2.5-flash')
+    return env_first('EVAL_MODEL', 'OPENAI_EVAL_MODEL', default='gpt-4o')
+
+
+def get_hub_username() -> str:
+    """
+    Username do LangSmith Hub usado em `{username}/bug_to_user_story_v2`.
+    Aceita USERNAME_LANGSMITH_HUB (scaffold) ou LANGSMITH_USERNAME (SPEC).
+    """
+    return env_first('USERNAME_LANGSMITH_HUB', 'LANGSMITH_USERNAME')
+
+
+_RATE_LIMITER = None
+
+
+def get_rate_limiter():
+    """
+    Rate limiter compartilhado por todas as instâncias de LLM do processo.
+
+    A avaliação dispara ~180 chamadas (15 exemplos x (1 resposta + 5 juízes) x 2 prompts).
+    O plano gratuito do Gemini limita gemini-2.5-flash a 5 req/min, então sem
+    limitação o run falha com HTTP 429. Controle via LLM_REQUESTS_PER_MINUTE
+    (default: 4.5 no Google, 60 na OpenAI). Use 0 para desativar.
+    """
+    global _RATE_LIMITER
+    if _RATE_LIMITER is None:
+        from langchain_core.rate_limiters import InMemoryRateLimiter
+
+        default_rpm = '4.5' if get_provider() == 'google' else '60'
+        rpm = float(os.getenv('LLM_REQUESTS_PER_MINUTE', default_rpm))
+        if rpm <= 0:
+            _RATE_LIMITER = False
+        else:
+            _RATE_LIMITER = InMemoryRateLimiter(
+                requests_per_second=rpm / 60.0,
+                check_every_n_seconds=0.5,
+                max_bucket_size=1,
+            )
+    return _RATE_LIMITER or None
+
+
 def get_llm(model: Optional[str] = None, temperature: float = 0.0):
     """
     Retorna uma instância de LLM configurada baseada no provider.
 
     Args:
-        model: Nome do modelo (opcional, usa LLM_MODEL do .env por padrão)
+        model: Nome do modelo (opcional, usa get_response_model() por padrão)
         temperature: Temperatura para geração (padrão: 0.0 para determinístico)
 
     Returns:
@@ -187,8 +276,10 @@ def get_llm(model: Optional[str] = None, temperature: float = 0.0):
     Raises:
         ValueError: Se provider não for suportado ou API key não configurada
     """
-    provider = os.getenv('LLM_PROVIDER', 'openai').lower()
-    model_name = model or os.getenv('LLM_MODEL', 'gpt-4o-mini')
+    provider = get_provider()
+    model_name = model or get_response_model()
+    rate_limiter = get_rate_limiter()
+    max_retries = int(os.getenv('LLM_MAX_RETRIES', '6'))
 
     if provider == 'openai':
         from langchain_openai import ChatOpenAI
@@ -203,7 +294,9 @@ def get_llm(model: Optional[str] = None, temperature: float = 0.0):
         return ChatOpenAI(
             model=model_name,
             temperature=temperature,
-            api_key=api_key
+            api_key=api_key,
+            max_retries=max_retries,
+            rate_limiter=rate_limiter,
         )
 
     elif provider == 'google':
@@ -219,7 +312,9 @@ def get_llm(model: Optional[str] = None, temperature: float = 0.0):
         return ChatGoogleGenerativeAI(
             model=model_name,
             temperature=temperature,
-            google_api_key=api_key
+            google_api_key=api_key,
+            max_retries=max_retries,
+            rate_limiter=rate_limiter,
         )
 
     else:
@@ -231,7 +326,7 @@ def get_llm(model: Optional[str] = None, temperature: float = 0.0):
 
 def get_eval_llm(temperature: float = 0.0):
     """
-    Retorna LLM configurado especificamente para avaliação (usa EVAL_MODEL).
+    Retorna LLM configurado especificamente para avaliação (usa get_eval_model()).
 
     Args:
         temperature: Temperatura para geração
@@ -239,5 +334,4 @@ def get_eval_llm(temperature: float = 0.0):
     Returns:
         Instância de LLM configurada para avaliação
     """
-    eval_model = os.getenv('EVAL_MODEL', 'gpt-4o')
-    return get_llm(model=eval_model, temperature=temperature)
+    return get_llm(model=get_eval_model(), temperature=temperature)
